@@ -7,118 +7,26 @@ load_dotenv()
 
 st.set_page_config(page_title="StapuBox Admin Engine", layout="wide")
 
-st.markdown("""
-<style>
-    .stApp {
-        background-color: #F8FAFC !important;
-        color: #1E293B !important;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-    .block-container {
-        padding-top: 1.2rem !important;
-        padding-bottom: 1.5rem !important;
-        max-width: 920px !important;
-    }
-    
-    /* Calendar Headers */
-    .cal-header {
-        text-align: center;
-        font-weight: 700;
-        font-size: 0.78rem;
-        color: #64748B;
-        padding-bottom: 2px;
-    }
-    
-    /* Day Cell - Compact */
-    .day-box {
-        background-color: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 5px;
-        height: 42px !important;
-        padding: 3px 5px;
-        margin-bottom: 4px;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-    }
-    .day-box.empty { background: transparent; border: none; }
-    
-    /* Active 7-Day Red Batch */
-    .day-box.active-batch {
-        background-color: #FEF2F2 !important;
-        border: 1.5px solid #EF4444 !important;
-    }
-    .day-number {
-        font-size: 0.78rem;
-        font-weight: 700;
-        color: #0F172A;
-        line-height: 1;
-    }
-    .badge-red {
-        font-size: 0.58rem;
-        background: #EF4444;
-        color: #FFFFFF;
-        padding: 1px 3px;
-        border-radius: 3px;
-        font-weight: 600;
-        text-align: center;
-        line-height: 1.1;
-    }
-    
-    /* Content Card */
-    .question-card {
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 6px;
-        padding: 10px 12px;
-        margin-top: 8px;
-        margin-bottom: 6px;
-    }
-    .q-title {
-        font-size: 0.88rem;
-        font-weight: 600;
-        color: #0F172A;
-    }
+def load_css(file_name: str):
+    if os.path.exists(file_name):
+        with open(file_name, "r") as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-    /* Option Buttons */
-    div[data-testid="stButton"] button {
-        width: 100%;
-        border-radius: 5px;
-        font-size: 0.82rem;
-        font-weight: 500;
-        padding: 5px 8px;
-        height: auto;
-        min-height: 32px;
-    }
-    .default-opt button {
-        background-color: #F1F5F9 !important;
-        color: #1E293B !important;
-        border: 1px solid #CBD5E1 !important;
-    }
-    .correct-opt button {
-        background-color: #DCFCE7 !important;
-        color: #15803D !important;
-        border: 1.5px solid #22C55E !important;
-    }
-    .wrong-opt button {
-        background-color: #FEE2E2 !important;
-        color: #B91C1C !important;
-        border: 1.5px solid #EF4444 !important;
-    }
-</style>
-""", unsafe_allow_html=True)
+load_css("style.css")
 
 if "batch_start_day" not in st.session_state:
     st.session_state.batch_start_day = 1
 if "selected_day" not in st.session_state:
     st.session_state.selected_day = 1
+if "poll_state" not in st.session_state:
+    st.session_state.poll_state = {}
 
 start = st.session_state.batch_start_day
 end = start + 6
 
-st.sidebar.markdown("### ⚙️ Engine Controls")
+st.sidebar.markdown("### ⚙️ Select Details")
 selected_sport = st.sidebar.selectbox("Sport", ["Cricket", "Football", "Tennis", "Basketball"])
-selected_month = st.sidebar.selectbox("Month", list(range(1, 13)), index=8)
+selected_month = st.sidebar.selectbox("Month", list(range(1, 13)), index=8) 
 selected_year = st.sidebar.number_input("Year", min_value=2024, max_value=2030, value=2026)
 
 st.sidebar.markdown("---")
@@ -166,7 +74,7 @@ WEEK_DATA = {
 st.markdown("<h2 style='margin-bottom: 2px; color: #0F172A;'>StapuBox — Content & Calendar Scheduling Engine</h2>", unsafe_allow_html=True)
 st.markdown(f"<p style='color: #64748B; font-size: 0.88rem; margin-bottom: 12px;'>Sport: <b>{selected_sport}</b> | Active Batch: <b>Day {start} to Day {end}</b> | <span style='color:#15803D; font-weight:600;'>🔒 Scheduled 10:00 AM Daily</span></p>", unsafe_allow_html=True)
 
-cal = calendar.Calendar(firstweekday=0) 
+cal = calendar.Calendar(firstweekday=0)
 month_days = cal.monthdayscalendar(selected_year, selected_month)
 
 cols = st.columns(7)
@@ -199,7 +107,6 @@ for idx, d in enumerate(range(start, end + 1)):
             st.session_state.selected_day = d
             st.rerun()
 
-
 current_day = st.session_state.selected_day
 if current_day < start or current_day > end:
     current_day = start
@@ -209,13 +116,13 @@ items = WEEK_DATA.get(str(current_day), [])
 st.markdown(f"<p style='font-size:0.85rem; color:#475569; margin: 8px 0 4px 0;'>Showing questions for: <b>Day {current_day} (September {current_day}, {selected_year})</b></p>", unsafe_allow_html=True)
 
 for q_idx, item in enumerate(items):
-    st.markdown(f"""
-    <div class="question-card">
-        <div class="q-title"><span style="color:#64748B; font-size:0.75rem;">[{item['type']}]</span> {item['q']}</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
     if item["type"] == "MCQ":
+        st.markdown(f"""
+        <div class="question-card">
+            <div class="q-title"><span style="color:#64748B; font-size:0.75rem;">[MCQ]</span> {item['q']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
         ans_key = f"ans_{current_day}_{q_idx}"
         if ans_key not in st.session_state:
             st.session_state[ans_key] = None
@@ -223,6 +130,7 @@ for q_idx, item in enumerate(items):
         selected_opt = st.session_state[ans_key]
         opt_cols = st.columns(len(item["opts"]))
         
+        st.markdown("<div class='mcq-btn-wrapper'>", unsafe_allow_html=True)
         for o_idx, opt in enumerate(item["opts"]):
             if selected_opt is None:
                 btn_cls = "default-opt"
@@ -230,7 +138,7 @@ for q_idx, item in enumerate(items):
             elif opt == item["ans"]:
                 btn_cls = "correct-opt"
                 label = f"✓ {opt}"
-            elif opt == selected_opt:
+            elif opt == selected_opt and selected_opt != item["ans"]:
                 btn_cls = "wrong-opt"
                 label = f"✗ {opt}"
             else:
@@ -243,10 +151,61 @@ for q_idx, item in enumerate(items):
                     st.session_state[ans_key] = opt
                     st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
         
         if selected_opt is not None:
-            if st.button("↺ Reset", key=f"rst_{current_day}_{q_idx}"):
+            if st.button("↺ Reset Question", key=f"rst_{current_day}_{q_idx}"):
                 st.session_state[ans_key] = None
                 st.rerun()
-    else:
-        st.radio("Poll Options", item["opts"], key=f"p_{current_day}_{q_idx}", horizontal=True, label_visibility="collapsed")
+
+    elif item["type"] == "POLL":
+        poll_key = f"poll_{current_day}_{q_idx}"
+        if poll_key not in st.session_state.poll_state:
+            st.session_state.poll_state[poll_key] = {
+                "selected": None,
+                "counts": {opt: 1 for opt in item["opts"]}
+            }
+        
+        current_poll = st.session_state.poll_state[poll_key]
+        total_votes = sum(current_poll["counts"].values())
+        
+        st.markdown(f"""
+        <div class="wa-poll-card">
+            <div class="wa-poll-title">📊 {item['q']}</div>
+            <div class="wa-poll-subtitle">Select one option • {total_votes} total votes</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        for opt in item["opts"]:
+            count = current_poll["counts"][opt]
+            pct = int((count / total_votes) * 100) if total_votes > 0 else 0
+            is_user_choice = (current_poll["selected"] == opt)
+            
+            fill_class = "wa-bar-fill voted" if is_user_choice else "wa-bar-fill"
+            check_icon = "✓ " if is_user_choice else ""
+            
+            p_col1, p_col2 = st.columns([5, 1])
+            with p_col1:
+                st.markdown(f"""
+                <div class="wa-bar-bg">
+                    <div class="{fill_class}" style="width: {pct}%;"></div>
+                    <div class="wa-bar-content">
+                        <span><b>{check_icon}</b>{opt}</span>
+                        <span style="font-size:0.75rem; color:#475569;"><b>{pct}%</b> ({count})</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            with p_col2:
+                st.markdown("<div class='wa-vote-btn'>", unsafe_allow_html=True)
+                btn_txt = "Remove" if is_user_choice else "Vote"
+                if st.button(btn_txt, key=f"wa_{poll_key}_{opt}", use_container_width=True):
+                    if is_user_choice:
+                        current_poll["counts"][opt] -= 1
+                        current_poll["selected"] = None
+                    else:
+                        if current_poll["selected"] is not None:
+                            current_poll["counts"][current_poll["selected"]] -= 1
+                        current_poll["counts"][opt] += 1
+                        current_poll["selected"] = opt
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
