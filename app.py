@@ -175,8 +175,7 @@ for week in month_days:
 
 st.write("")
 col_ap1, col_ap2 = st.columns([1, 1])
-with col_ap1:
-    st.info("💡 Questions are automatically populated from the dedicated 50-item per sport database (`sports_bank.db`).")
+
 with col_ap2:
     if st.button("✅ Approve Whole Week (Lock 10:00 AM Daily)", use_container_width=True):
         db = get_db()
