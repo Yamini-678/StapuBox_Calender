@@ -8,7 +8,7 @@ from models import SessionLocal, Athlete, ContentItem, CalendarBatch
 from sports_bank import BankSession, QuestionBankItem, seed_question_bank
 
 load_dotenv()
-seed_question_bank()  
+seed_question_bank()
 
 st.set_page_config(page_title="StapuBox Admin Engine", layout="wide")
 
@@ -18,7 +18,6 @@ def load_css(file_name="style.css"):
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 load_css("style.css")
-
 
 if "batch_start_day" not in st.session_state:
     st.session_state.batch_start_day = 1
@@ -30,13 +29,13 @@ if "poll_state" not in st.session_state:
 start = st.session_state.batch_start_day
 end = start + 6
 
-st.sidebar.markdown("### ⚙️ Engine Controls")
+st.sidebar.markdown("### ⚙️ Select Details")
 selected_sports = st.sidebar.multiselect(
     "Active Sports", 
     ["Cricket", "Football", "Badminton"], 
     default=["Cricket", "Football", "Badminton"]
 )
-selected_month = st.sidebar.selectbox("Month", list(range(1, 13)), index=8) 
+selected_month = st.sidebar.selectbox("Month", list(range(1, 13)), index=8)
 selected_year = st.sidebar.number_input("Year", min_value=2024, max_value=2030, value=2026)
 
 st.sidebar.markdown("---")
@@ -135,7 +134,7 @@ status_text = "🔒 Scheduled (10:00 AM Daily)" if is_all_scheduled else "📝 D
 st.markdown(
     f"<p style='color: #64748B; font-size: 0.88rem; margin-bottom: 12px;'>"
     f"Sports: <b>{', '.join(selected_sports)}</b> | Active Batch: <b>Day {start} to Day {end}</b> | "
-    f"<span style='color:{status_color}; font-weight:600;'>{status_text}</span> | ",
+    f"<span style='color:{status_color}; font-weight:600;'>{status_text}</span> | ", 
     unsafe_allow_html=True
 )
 
@@ -156,13 +155,16 @@ for week in month_days:
         else:
             is_active = start <= day <= end
             has_bday = day in birthday_dict
-            box_cls = "day-box active-batch" if is_active else "day-box"
             
-            badge_html = ""
             if has_bday:
-                badge_html += f"<div class='badge-bday'>🎂 {birthday_dict[day].name.split()[0]}</div>"
+                box_cls = "day-box birthday-day"
+                badge_html = f"<div class='badge-bday'><span class='cake-icon'>🎂</span> {birthday_dict[day].name.split()[0]}</div>"
             elif is_active:
-                badge_html += "<div class='badge-red'>Active</div>"
+                box_cls = "day-box active-batch"
+                badge_html = "<div class='badge-red'>Active</div>"
+            else:
+                box_cls = "day-box"
+                badge_html = ""
                 
             cols[idx].markdown(f"""
                 <div class="{box_cls}">
@@ -173,6 +175,8 @@ for week in month_days:
 
 st.write("")
 col_ap1, col_ap2 = st.columns([1, 1])
+with col_ap1:
+    st.info("💡 Questions are automatically populated from the dedicated 50-item per sport database (`sports_bank.db`).")
 with col_ap2:
     if st.button("✅ Approve Whole Week (Lock 10:00 AM Daily)", use_container_width=True):
         db = get_db()
@@ -217,14 +221,12 @@ if current_day in birthday_dict:
         </div>
     </div>
     """, unsafe_allow_html=True)
-
 cur_date = date(selected_year, selected_month, current_day)
 day_items = get_content_for_day(cur_date)
 
 st.markdown(f"<p style='font-size:0.85rem; color:#475569; margin: 8px 0 4px 0;'>Showing questions for: <b>Day {current_day} ({calendar.month_name[selected_month]} {current_day}, {selected_year})</b></p>", unsafe_allow_html=True)
 
 for q_idx, item in enumerate(day_items):
-
     if item.type == "MCQ" and item.sport in selected_sports:
         st.markdown(f"""
         <div class="question-card">
@@ -239,33 +241,40 @@ for q_idx, item in enumerate(day_items):
         selected_opt = st.session_state[ans_key]
         opt_cols = st.columns(len(item.options))
         
-        st.markdown("<div class='mcq-btn-wrapper'>", unsafe_allow_html=True)
         for o_idx, opt in enumerate(item.options):
-            if selected_opt is None:
+            opt_clean = str(opt).strip()
+            ans_clean = str(item.correct_answer).strip() if item.correct_answer else ""
+            sel_clean = str(selected_opt).strip() if selected_opt else None
+
+            if sel_clean is None:
                 btn_cls = "default-opt"
-                label = opt
-            elif opt == item.correct_answer:
+                label = opt_clean
+            elif opt_clean == ans_clean:
                 btn_cls = "correct-opt"
-                label = f"✓ {opt}"
-            elif opt == selected_opt and selected_opt != item.correct_answer:
+                label = f"✓ {opt_clean}"
+            elif opt_clean == sel_clean and sel_clean != ans_clean:
                 btn_cls = "wrong-opt"
-                label = f"✗ {opt}"
+                label = f"✗ {opt_clean}"
             else:
                 btn_cls = "default-opt"
-                label = opt
+                label = opt_clean
                 
             with opt_cols[o_idx]:
-                st.markdown(f"<div class='{btn_cls}'>", unsafe_allow_html=True)
-                if st.button(label, key=f"b_{current_day}_{item.id}_{o_idx}", disabled=(selected_opt is not None)):
-                    st.session_state[ans_key] = opt
+                st.markdown(f"<div class='{btn_cls}'></div>", unsafe_allow_html=True)
+                if st.button(
+                    label, 
+                    key=f"mcq_{current_day}_{item.id}_{o_idx}", 
+                    disabled=(selected_opt is not None),
+                    use_container_width=True
+                ):
+                    st.session_state[ans_key] = opt_clean
                     st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
         
         if selected_opt is not None:
             if st.button("↺ Reset Question", key=f"rst_{current_day}_{item.id}"):
                 st.session_state[ans_key] = None
                 st.rerun()
+
 
     elif item.type == "POLL":
         poll_key = f"poll_{current_day}_{item.id}"
