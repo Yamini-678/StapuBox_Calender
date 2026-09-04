@@ -10,7 +10,6 @@
     max-width: 920px !important;
 }
 
-
 .cal-header {
     text-align: center;
     font-weight: 700;
@@ -23,7 +22,7 @@
     background-color: #FFFFFF;
     border: 1px solid #E2E8F0;
     border-radius: 5px;
-    height: 42px !important;
+    height: 44px !important;
     padding: 3px 5px;
     margin-bottom: 4px;
     display: flex;
@@ -59,6 +58,34 @@
     line-height: 1.1;
 }
 
+.badge-bday {
+    font-size: 0.56rem;
+    background: #F97316;
+    color: #FFFFFF;
+    padding: 1px 3px;
+    border-radius: 3px;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.1;
+}
+
+.birthday-card {
+    background: #FFF7ED;
+    border: 1px solid #FED7AA;
+    border-left: 4px solid #F97316;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 10px 0;
+}
+
+.fact-card {
+    background: #F0F9FF;
+    border: 1px solid #BAE6FD;
+    border-left: 4px solid #0284C7;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 8px 0;
+}
 
 .question-card {
     background: #FFFFFF;
@@ -86,7 +113,6 @@
     transition: all 0.15s ease-in-out;
 }
 
-
 .default-opt button {
     background-color: #F1F5F9 !important;
     color: #1E293B !important;
@@ -112,14 +138,13 @@
     box-shadow: 0 2px 6px rgba(220, 38, 38, 0.3) !important;
 }
 
-
 .wa-poll-card {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
     border-radius: 8px;
     padding: 12px 14px;
     margin-top: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
 }
 
 .wa-poll-title {

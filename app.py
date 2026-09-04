@@ -1,18 +1,24 @@
 import streamlit as st
 import calendar
+from datetime import date, datetime
 import os
 from dotenv import load_dotenv
 
+from models import SessionLocal, Athlete, ContentItem, CalendarBatch
+from sports_bank import BankSession, QuestionBankItem, seed_question_bank
+
 load_dotenv()
+seed_question_bank()  
 
 st.set_page_config(page_title="StapuBox Admin Engine", layout="wide")
 
-def load_css(file_name: str):
+def load_css(file_name="style.css"):
     if os.path.exists(file_name):
         with open(file_name, "r") as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 load_css("style.css")
+
 
 if "batch_start_day" not in st.session_state:
     st.session_state.batch_start_day = 1
@@ -24,8 +30,12 @@ if "poll_state" not in st.session_state:
 start = st.session_state.batch_start_day
 end = start + 6
 
-st.sidebar.markdown("### ⚙️ Select Details")
-selected_sport = st.sidebar.selectbox("Sport", ["Cricket", "Football", "Tennis", "Basketball"])
+st.sidebar.markdown("### ⚙️ Engine Controls")
+selected_sports = st.sidebar.multiselect(
+    "Active Sports", 
+    ["Cricket", "Football", "Badminton"], 
+    default=["Cricket", "Football", "Badminton"]
+)
 selected_month = st.sidebar.selectbox("Month", list(range(1, 13)), index=8) 
 selected_year = st.sidebar.number_input("Year", min_value=2024, max_value=2030, value=2026)
 
@@ -39,40 +49,97 @@ if st.sidebar.button("⏩ Advance Next 7 Days", use_container_width=True):
     st.session_state.selected_day = st.session_state.batch_start_day
     st.rerun()
 
-WEEK_DATA = {
-    str(start): [
-        {"type": "MCQ", "q": "Who holds the record for highest individual ODI score (264)?", "opts": ["Rohit Sharma", "Martin Guptill", "Chris Gayle", "Virender Sehwag"], "ans": "Rohit Sharma"},
-        {"type": "POLL", "q": "Who will win the ICC Champions Trophy?", "opts": ["India", "Australia", "England"]}
-    ],
-    str(start + 1): [
-        {"type": "MCQ", "q": "Which player has won the most Ballon d'Or awards?", "opts": ["Cristiano Ronaldo", "Lionel Messi", "Johan Cruyff", "Michel Platini"], "ans": "Lionel Messi"},
-        {"type": "POLL", "q": "Will Real Madrid win UCL this season?", "opts": ["Yes", "No"]}
-    ],
-    str(start + 2): [
-        {"type": "MCQ", "q": "How many Grand Slam singles titles has Novak Djokovic won?", "opts": ["20", "22", "24", "26"], "ans": "24"},
-        {"type": "POLL", "q": "Best tennis surface?", "opts": ["Grass", "Clay", "Hard Court"]}
-    ],
-    str(start + 3): [
-        {"type": "MCQ", "q": "Which team has won 5 IPL trophies?", "opts": ["CSK & MI", "KKR & SRH", "RCB & DC", "RR & GT"], "ans": "CSK & MI"},
-        {"type": "POLL", "q": "Is T20 overshadowing Test cricket?", "opts": ["Yes", "No"]}
-    ],
-    str(start + 4): [
-        {"type": "MCQ", "q": "Who is the NBA all-time top scorer?", "opts": ["Michael Jordan", "Kareem Abdul-Jabbar", "LeBron James", "Kobe Bryant"], "ans": "LeBron James"},
-        {"type": "POLL", "q": "Fastest growing sport globally?", "opts": ["Formula 1", "Basketball", "Cricket"]}
-    ],
-    str(start + 5): [
-        {"type": "MCQ", "q": "Who won the inaugural 2007 T20 World Cup?", "opts": ["Pakistan", "India", "Australia", "West Indies"], "ans": "India"},
-        {"type": "POLL", "q": "DRS for wide balls?", "opts": ["Support", "Oppose"]}
-    ],
-    str(start + 6): [
-        {"type": "MCQ", "q": "Most wickets in Test cricket history?", "opts": ["Shane Warne", "Muttiah Muralitharan", "James Anderson", "Anil Kumble"], "ans": "Muttiah Muralitharan"},
-        {"type": "POLL", "q": "Current best fast bowler?", "opts": ["Jasprit Bumrah", "Pat Cummins", "Kagiso Rabada"]}
-    ]
-}
+def get_db():
+    return SessionLocal()
 
+def get_bank_db():
+    return BankSession()
 
-st.markdown("<h2 style='margin-bottom: 2px; color: #0F172A;'>StapuBox — Content & Calendar Scheduling Engine</h2>", unsafe_allow_html=True)
-st.markdown(f"<p style='color: #64748B; font-size: 0.88rem; margin-bottom: 12px;'>Sport: <b>{selected_sport}</b> | Active Batch: <b>Day {start} to Day {end}</b> | <span style='color:#15803D; font-weight:600;'>🔒 Scheduled 10:00 AM Daily</span></p>", unsafe_allow_html=True)
+def get_birthdays_for_month(month: int):
+    db = get_db()
+    athletes = db.query(Athlete).filter(Athlete.birth_month == month).all()
+    db.close()
+    return {a.birth_day: a for a in athletes}
+
+def get_content_for_day(target_date: date):
+    db = get_db()
+    items = db.query(ContentItem).filter(ContentItem.scheduled_date == target_date).all()
+    db.close()
+    return items
+
+def populate_schedule_from_bank(year, month, s_day, e_day):
+    db = get_db()
+    bank_db = get_bank_db()
+    
+    cricket_pool = bank_db.query(QuestionBankItem).filter(QuestionBankItem.sport == "Cricket").all()
+    football_pool = bank_db.query(QuestionBankItem).filter(QuestionBankItem.sport == "Football").all()
+    badminton_pool = bank_db.query(QuestionBankItem).filter(QuestionBankItem.sport == "Badminton").all()
+    poll_pool = bank_db.query(QuestionBankItem).filter(QuestionBankItem.type == "POLL").all()
+    fact_pool = bank_db.query(QuestionBankItem).filter(QuestionBankItem.type == "FACT").all()
+    
+    batch_start = date(year, month, s_day)
+    batch_end = date(year, month, e_day)
+    
+    batch = db.query(CalendarBatch).filter(
+        CalendarBatch.start_date == batch_start,
+        CalendarBatch.end_date == batch_end
+    ).first()
+    
+    if not batch:
+        batch = CalendarBatch(
+            sport="All",
+            start_date=batch_start,
+            end_date=batch_end,
+            status="DRAFT"
+        )
+        db.add(batch)
+        db.flush()
+
+    for d in range(s_day, e_day + 1):
+        c_date = date(year, month, d)
+        existing = db.query(ContentItem).filter(ContentItem.scheduled_date == c_date).count()
+        if existing == 0:
+            idx = (d - 1) % 50
+            c_item = cricket_pool[idx % len(cricket_pool)]
+            f_item = football_pool[idx % len(football_pool)]
+            b_item = badminton_pool[idx % len(badminton_pool)]
+            p_item = poll_pool[idx % len(poll_pool)]
+            fa_item = fact_pool[idx % len(fact_pool)]
+            
+            new_items = [
+                ContentItem(batch_id=batch.id, sport="Cricket", type="MCQ", category="Records", question=c_item.question, options=c_item.options, correct_answer=c_item.correct_answer, scheduled_date=c_date),
+                ContentItem(batch_id=batch.id, sport="Football", type="MCQ", category="Trivia", question=f_item.question, options=f_item.options, correct_answer=f_item.correct_answer, scheduled_date=c_date),
+                ContentItem(batch_id=batch.id, sport="Badminton", type="MCQ", category="Tournaments", question=b_item.question, options=b_item.options, correct_answer=b_item.correct_answer, scheduled_date=c_date),
+                ContentItem(batch_id=batch.id, sport="General", type="POLL", category="Fan Vote", question=p_item.question, options=p_item.options, correct_answer=None, scheduled_date=c_date),
+                ContentItem(batch_id=batch.id, sport="General", type="FACT", category="Did You Know?", question=fa_item.question, options=None, correct_answer=None, scheduled_date=c_date)
+            ]
+            db.add_all(new_items)
+            
+    db.commit()
+    db.close()
+    bank_db.close()
+
+populate_schedule_from_bank(selected_year, selected_month, start, end)
+
+db = get_db()
+batch_items = db.query(ContentItem).filter(
+    ContentItem.scheduled_date >= date(selected_year, selected_month, start),
+    ContentItem.scheduled_date <= date(selected_year, selected_month, end)
+).all()
+is_all_scheduled = all(item.status == "SCHEDULED" for item in batch_items) if batch_items else False
+db.close()
+
+st.markdown("<h2 style='margin-bottom: 2px; color: #0F172A;'>StapuBox — Content & Calendar Scheduling</h2>", unsafe_allow_html=True)
+status_color = "#15803D" if is_all_scheduled else "#D97706"
+status_text = "🔒 Scheduled (10:00 AM Daily)" if is_all_scheduled else "📝 Draft Mode (Pending Approval)"
+st.markdown(
+    f"<p style='color: #64748B; font-size: 0.88rem; margin-bottom: 12px;'>"
+    f"Sports: <b>{', '.join(selected_sports)}</b> | Active Batch: <b>Day {start} to Day {end}</b> | "
+    f"<span style='color:{status_color}; font-weight:600;'>{status_text}</span> | ",
+    unsafe_allow_html=True
+)
+
+birthday_dict = get_birthdays_for_month(selected_month)
 
 cal = calendar.Calendar(firstweekday=0)
 month_days = cal.monthdayscalendar(selected_year, selected_month)
@@ -88,21 +155,45 @@ for week in month_days:
             cols[idx].markdown("<div class='day-box empty'></div>", unsafe_allow_html=True)
         else:
             is_active = start <= day <= end
+            has_bday = day in birthday_dict
             box_cls = "day-box active-batch" if is_active else "day-box"
-            badge = "<div class='badge-red'>Active</div>" if is_active else ""
+            
+            badge_html = ""
+            if has_bday:
+                badge_html += f"<div class='badge-bday'>🎂 {birthday_dict[day].name.split()[0]}</div>"
+            elif is_active:
+                badge_html += "<div class='badge-red'>Active</div>"
+                
             cols[idx].markdown(f"""
                 <div class="{box_cls}">
                     <span class="day-number">{day}</span>
-                    {badge}
+                    {badge_html}
                 </div>
             """, unsafe_allow_html=True)
+
+st.write("")
+col_ap1, col_ap2 = st.columns([1, 1])
+with col_ap2:
+    if st.button("✅ Approve Whole Week (Lock 10:00 AM Daily)", use_container_width=True):
+        db = get_db()
+        items_to_lock = db.query(ContentItem).filter(
+            ContentItem.scheduled_date >= date(selected_year, selected_month, start),
+            ContentItem.scheduled_date <= date(selected_year, selected_month, end)
+        ).all()
+        for it in items_to_lock:
+            it.status = "SCHEDULED"
+        db.commit()
+        db.close()
+        st.success("Whole week successfully locked and scheduled for 10:00 AM daily!")
+        st.rerun()
 
 st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
 day_cols = st.columns(7)
 for idx, d in enumerate(range(start, end + 1)):
     with day_cols[idx]:
         is_sel = (st.session_state.selected_day == d)
-        lbl = f"● Day {d}" if is_sel else f"Day {d}"
+        bday_icon = "🎂 " if d in birthday_dict else ""
+        lbl = f"● {bday_icon}Day {d}" if is_sel else f"{bday_icon}Day {d}"
         if st.button(lbl, key=f"sel_d_{d}", use_container_width=True):
             st.session_state.selected_day = d
             st.rerun()
@@ -111,34 +202,52 @@ current_day = st.session_state.selected_day
 if current_day < start or current_day > end:
     current_day = start
 
-items = WEEK_DATA.get(str(current_day), [])
+if current_day in birthday_dict:
+    ath = birthday_dict[current_day]
+    age = selected_year - ath.birth_year
+    st.markdown(f"""
+    <div class="birthday-card">
+        <div style="font-size: 1.05rem; font-weight: 700; color: #9A3412;">🎉 Celebrity Birthday: {ath.name} ({ath.sport})</div>
+        <div style="font-size: 0.82rem; color: #C2410C; margin-top: 2px;">
+            Turns <b>{age} years old</b> on this date ({calendar.month_name[selected_month]} {current_day}, {selected_year}).
+        </div>
+        <div style="font-size: 0.82rem; color: #7C2D12; margin-top: 4px;">
+            <b>Notable Records:</b> {ath.notable_records}<br>
+            <b>Trivia:</b> {ath.trivia_fact}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-st.markdown(f"<p style='font-size:0.85rem; color:#475569; margin: 8px 0 4px 0;'>Showing questions for: <b>Day {current_day} (September {current_day}, {selected_year})</b></p>", unsafe_allow_html=True)
+cur_date = date(selected_year, selected_month, current_day)
+day_items = get_content_for_day(cur_date)
 
-for q_idx, item in enumerate(items):
-    if item["type"] == "MCQ":
+st.markdown(f"<p style='font-size:0.85rem; color:#475569; margin: 8px 0 4px 0;'>Showing questions for: <b>Day {current_day} ({calendar.month_name[selected_month]} {current_day}, {selected_year})</b></p>", unsafe_allow_html=True)
+
+for q_idx, item in enumerate(day_items):
+
+    if item.type == "MCQ" and item.sport in selected_sports:
         st.markdown(f"""
         <div class="question-card">
-            <div class="q-title"><span style="color:#64748B; font-size:0.75rem;">[MCQ]</span> {item['q']}</div>
+            <div class="q-title"><span style="color:#0284C7; font-size:0.75rem;">[{item.sport.upper()} MCQ]</span> {item.question}</div>
         </div>
         """, unsafe_allow_html=True)
         
-        ans_key = f"ans_{current_day}_{q_idx}"
+        ans_key = f"ans_{current_day}_{item.id}"
         if ans_key not in st.session_state:
             st.session_state[ans_key] = None
             
         selected_opt = st.session_state[ans_key]
-        opt_cols = st.columns(len(item["opts"]))
+        opt_cols = st.columns(len(item.options))
         
         st.markdown("<div class='mcq-btn-wrapper'>", unsafe_allow_html=True)
-        for o_idx, opt in enumerate(item["opts"]):
+        for o_idx, opt in enumerate(item.options):
             if selected_opt is None:
                 btn_cls = "default-opt"
                 label = opt
-            elif opt == item["ans"]:
+            elif opt == item.correct_answer:
                 btn_cls = "correct-opt"
                 label = f"✓ {opt}"
-            elif opt == selected_opt and selected_opt != item["ans"]:
+            elif opt == selected_opt and selected_opt != item.correct_answer:
                 btn_cls = "wrong-opt"
                 label = f"✗ {opt}"
             else:
@@ -147,23 +256,23 @@ for q_idx, item in enumerate(items):
                 
             with opt_cols[o_idx]:
                 st.markdown(f"<div class='{btn_cls}'>", unsafe_allow_html=True)
-                if st.button(label, key=f"b_{current_day}_{q_idx}_{o_idx}", disabled=(selected_opt is not None)):
+                if st.button(label, key=f"b_{current_day}_{item.id}_{o_idx}", disabled=(selected_opt is not None)):
                     st.session_state[ans_key] = opt
                     st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
         
         if selected_opt is not None:
-            if st.button("↺ Reset Question", key=f"rst_{current_day}_{q_idx}"):
+            if st.button("↺ Reset Question", key=f"rst_{current_day}_{item.id}"):
                 st.session_state[ans_key] = None
                 st.rerun()
 
-    elif item["type"] == "POLL":
-        poll_key = f"poll_{current_day}_{q_idx}"
+    elif item.type == "POLL":
+        poll_key = f"poll_{current_day}_{item.id}"
         if poll_key not in st.session_state.poll_state:
             st.session_state.poll_state[poll_key] = {
                 "selected": None,
-                "counts": {opt: 1 for opt in item["opts"]}
+                "counts": {opt: 1 for opt in item.options}
             }
         
         current_poll = st.session_state.poll_state[poll_key]
@@ -171,12 +280,12 @@ for q_idx, item in enumerate(items):
         
         st.markdown(f"""
         <div class="wa-poll-card">
-            <div class="wa-poll-title">📊 {item['q']}</div>
+            <div class="wa-poll-title">📊 {item.question}</div>
             <div class="wa-poll-subtitle">Select one option • {total_votes} total votes</div>
         </div>
         """, unsafe_allow_html=True)
         
-        for opt in item["opts"]:
+        for opt in item.options:
             count = current_poll["counts"][opt]
             pct = int((count / total_votes) * 100) if total_votes > 0 else 0
             is_user_choice = (current_poll["selected"] == opt)
@@ -209,3 +318,11 @@ for q_idx, item in enumerate(items):
                         current_poll["selected"] = opt
                     st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
+
+    elif item.type == "FACT":
+        st.markdown(f"""
+        <div class="fact-card">
+            <div style="font-size:0.75rem; font-weight:700; color:#0369A1; margin-bottom:2px;">💡 DID YOU KNOW? (DAILY SPORTS FACT)</div>
+            <div style="font-size:0.86rem; color:#0C4A6E; font-weight:500;">{item.question}</div>
+        </div>
+        """, unsafe_allow_html=True)
