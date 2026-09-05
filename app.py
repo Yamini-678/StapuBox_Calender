@@ -14,11 +14,10 @@ st.set_page_config(page_title="StapuBox Admin Engine", layout="wide")
 
 def load_css(file_name="style.css"):
     if os.path.exists(file_name):
-        with open(file_name, "r") as f:
+        with open(file_name, "r", encoding="utf-8") as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 load_css("style.css")
-
 if "last_viewed_month" not in st.session_state:
     st.session_state.last_viewed_month = 9 
 if "batch_start_day" not in st.session_state:
@@ -28,7 +27,7 @@ if "selected_day" not in st.session_state:
 if "poll_state" not in st.session_state:
     st.session_state.poll_state = {}
 
-st.sidebar.markdown("### ⚙️ Engine Controls")
+st.sidebar.markdown("### ⚙️ Select Details")
 selected_sports = st.sidebar.multiselect(
     "Active Sports", 
     ["Cricket", "Football", "Badminton"], 
@@ -70,6 +69,7 @@ if st.sidebar.button("⏩ Advance Next 7 Days", use_container_width=True):
         st.session_state.batch_start_day = next_start
         st.session_state.selected_day = next_start
     st.rerun()
+
 def get_db():
     return SessionLocal()
 
@@ -154,14 +154,13 @@ batch_items = db.query(ContentItem).filter(
 is_all_scheduled = all(item.status == "SCHEDULED" for item in batch_items) if batch_items else False
 db.close()
 
-st.markdown("<h2 style='margin-bottom: 2px; color: #0F172A;'>StapuBox — Content & Calendar Scheduling Engine</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='margin-bottom: 2px; color: #0F172A;'>StapuBox — Content & Calendar Scheduling </h2>", unsafe_allow_html=True)
 status_color = "#15803D" if is_all_scheduled else "#D97706"
 status_text = "🔒 Scheduled (10:00 AM Daily)" if is_all_scheduled else "📝 Draft Mode (Pending Approval)"
 st.markdown(
     f"<p style='color: #64748B; font-size: 0.88rem; margin-bottom: 8px;'>"
     f"Sports: <b>{', '.join(selected_sports)}</b> | Active Batch: <b>Day {start} to Day {end}</b> | "
-    f"<span style='color:{status_color}; font-weight:600;'>{status_text}</span> | "
-    f"<span style='color:#0284C7;'>Bank: <b>50 Items Loaded / Sport</b></span></p>", 
+    f"<span style='color:{status_color}; font-weight:600;'>{status_text}</span> | ",
     unsafe_allow_html=True
 )
 
@@ -189,7 +188,7 @@ for week in month_days:
                 box_cls = "day-box birthday-day"
                 badge_html = f"<div class='badge-bday'><span class='cake-icon'>🎂</span> {birthday_dict[day].name.split()[0]}</div>"
             elif is_active:
-                box_cls = "day-box active-batch"
+                box_cls = "day-box active-batch" 
                 badge_html = "<div class='badge-green'>Active</div>"
             else:
                 box_cls = "day-box"
@@ -201,6 +200,7 @@ for week in month_days:
                     {badge_html}
                 </div>
             """, unsafe_allow_html=True)
+
 
 st.write("")
 col_ap1, col_ap2 = st.columns([1, 1])
@@ -217,6 +217,7 @@ with col_ap2:
         db.close()
         st.success("Whole week successfully locked and scheduled for 10:00 AM daily!")
         st.rerun()
+
 
 st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
 day_cols = st.columns(len(range(start, end + 1)))
@@ -254,10 +255,7 @@ day_items = get_content_for_day(cur_date)
 
 st.markdown(f"<p style='font-size:0.85rem; color:#475569; margin: 8px 0 4px 0;'>Showing questions for: <b>Day {current_day} ({calendar.month_name[selected_month]} {current_day}, {selected_year})</b></p>", unsafe_allow_html=True)
 
-FB_EMOJIS = ["👍", "❤️", "🔥", "👏", "😮"]
-
 for q_idx, item in enumerate(day_items):
-
     if item.type == "MCQ" and item.sport in selected_sports:
         st.markdown(f"""
         <div class="question-card">
@@ -298,54 +296,76 @@ for q_idx, item in enumerate(day_items):
 
     elif item.type == "POLL":
         poll_key = f"poll_{current_day}_{item.id}"
+        poll_options = item.options[:2] if len(item.options) >= 2 else [item.options[0], "Alternative Choice"]
+        
         if poll_key not in st.session_state.poll_state:
             st.session_state.poll_state[poll_key] = {
                 "selected": None,
-                "counts": {opt: 1 for opt in item.options}
+                "counts": {poll_options[0]: 14, poll_options[1]: 9}
             }
         
         current_poll = st.session_state.poll_state[poll_key]
+        has_voted = current_poll["selected"] is not None
         total_votes = sum(current_poll["counts"].values())
+        emojis = ["⭐", "💡"]
         
-        with st.container():
-            st.markdown("<div class='fb-poll-marker'></div>", unsafe_allow_html=True)
-            st.markdown(f"""
-            <div class="fb-poll-header">📊 {item.question}</div>
-            <div class="fb-poll-sub">Facebook Community Poll • {total_votes} votes</div>
-            """, unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="sp-poll-card">
+            <div class="sp-poll-question">📊 {item.question}</div>
+            <div class="sp-poll-meta">{"React below to vote" if not has_voted else f"Community Poll • {total_votes} total votes"}</div>
+        """, unsafe_allow_html=True)
+        
+        h_col1, h_col2, _ = st.columns([1, 1, 6])
+        for idx, opt in enumerate(poll_options):
+            icon = emojis[idx]
+            is_chosen = (current_poll["selected"] == opt)
+            target_col = h_col1 if idx == 0 else h_col2
             
-            for idx, opt in enumerate(item.options):
-                emoji = FB_EMOJIS[idx % len(FB_EMOJIS)]
+            with target_col:
+                btn_cls = "sp-icon-btn selected" if is_chosen else "sp-icon-btn"
+                st.markdown(f"<div class='{btn_cls}'>", unsafe_allow_html=True)
+                if st.button(icon, key=f"sp_hbtn_{poll_key}_{idx}"):
+                    if is_chosen:
+                        current_poll["counts"][opt] -= 1
+                        current_poll["selected"] = None
+                    else:
+                        if current_poll["selected"] is not None:
+                            current_poll["counts"][current_poll["selected"]] -= 1
+                        current_poll["counts"][opt] += 1
+                        current_poll["selected"] = opt
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+        
+        if has_voted:
+            st.markdown("<div style='margin-top: 6px;'></div>", unsafe_allow_html=True)
+            res_c1, res_c2 = st.columns(2)
+            for idx, opt in enumerate(poll_options):
+                icon = emojis[idx]
                 count = current_poll["counts"][opt]
                 pct = int((count / total_votes) * 100) if total_votes > 0 else 0
-                is_user_choice = (current_poll["selected"] == opt)
+                is_chosen = (current_poll["selected"] == opt)
+                active_cls = "active" if is_chosen else ""
+                check_mark = "✓ " if is_chosen else ""
                 
-                fill_class = "fb-bar-fill voted" if is_user_choice else "fb-bar-fill"
-                check_mark = "✓ " if is_user_choice else ""
-                
-                p_col1, p_col2 = st.columns([3.6, 1.4])
-                with p_col1:
+                target_res = res_c1 if idx == 0 else res_c2
+                with target_res:
                     st.markdown(f"""
-                    <div class="fb-bar-container">
-                        <div class="{fill_class}" style="width: {pct}%;"></div>
-                        <div class="fb-bar-content">
-                            <span><span style="font-size:0.95rem; margin-right:4px;">{emoji}</span><b>{check_mark}</b>{opt}</span>
-                            <span style="font-size:0.68rem; color:#475569;"><b>{pct}%</b></span>
+                    <div class="sp-pct-track">
+                        <div class="sp-pct-fill {active_cls}" style="width: {pct}%;"></div>
+                        <div class="sp-pct-label">
+                            <span>{icon} <b>{check_mark}</b>{opt[:12]}</span>
+                            <span><b>{pct}%</b></span>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
-                with p_col2:
-                    btn_txt = "Undo" if is_user_choice else f"Vote {emoji}"
-                    if st.button(btn_txt, key=f"fb_{poll_key}_{opt}", use_container_width=True):
-                        if is_user_choice:
-                            current_poll["counts"][opt] -= 1
-                            current_poll["selected"] = None
-                        else:
-                            if current_poll["selected"] is not None:
-                                current_poll["counts"][current_poll["selected"]] -= 1
-                            current_poll["counts"][opt] += 1
-                            current_poll["selected"] = opt
-                        st.rerun()
+                    
+            if st.button("↺ Change Vote", key=f"rst_poll_{poll_key}"):
+                if current_poll["selected"] in current_poll["counts"]:
+                    current_poll["counts"][current_poll["selected"]] -= 1
+                current_poll["selected"] = None
+                st.rerun()
+                
+        st.markdown("</div>", unsafe_allow_html=True)
 
     elif item.type == "FACT":
         st.markdown(f"""
